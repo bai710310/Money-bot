@@ -24,7 +24,7 @@ button{border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weig
 .tag{font-size:11px;border-radius:6px;padding:2px 6px;margin-right:6px;white-space:nowrap}
 .list-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;gap:8px}
 .list-row .left{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.x{background:transparent;color:var(--sub);padding:0 4px;font-size:14px}
+.x{background:var(--rosesoft);color:var(--rose);padding:0;font-size:13px;width:26px;height:26px;border-radius:50%;flex-shrink:0;font-weight:700}
 .sec{font-size:13px;font-weight:700;margin:14px 0 8px}
 .chip{border:1px solid var(--amber);background:#fff;color:var(--amber);padding:7px 12px;font-size:13px;border-radius:10px}
 .chip.on{background:var(--amber);color:#fff}
@@ -175,7 +175,8 @@ button{border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weig
       </div>
       <div class="row" id="typeChips" style="margin-bottom:8px"></div>
       <div class="row" id="cardChips" style="margin-bottom:8px"></div>
-      <input id="expDate" type="date" style="margin-bottom:8px">
+      <div id="cycPreview" class="small" style="display:none;background:var(--ambersoft);color:#7A5E1E;border-radius:8px;padding:6px 10px;margin-bottom:8px"></div>
+      <input id="expDate" type="date" style="margin-bottom:8px" onchange="updatePreview()">
       <input id="expPeriods" type="number" placeholder="分幾期?(金額填總金額)" style="margin-bottom:8px" class="hide">
       <button class="btn-ink" style="width:100%" onclick="addExpense()">記下來</button>
     </div>
@@ -270,7 +271,7 @@ function render(){
   $("cycSub").textContent=cycleRange(month,c.s.payday)+" · "+c.s.payday+"號發薪";
   $("setRate").value=c.s.hourlyRate;$("setHours").value=c.s.hoursPerDay;$("setPayday").value=c.s.payday;$("setDays").value=c.m.workDays;
   // 卡片/固定/分期清單
-  $("cardList").innerHTML=S.cards.map(cd=>`<div class="list-row"><span class="left">${esc(cd.name)}<span class="tag" style="background:var(--ambersoft);color:#7A5E1E;margin-left:6px">${cd.closingDay}號結${cd.dueDay?" · "+cd.dueDay+"號繳":""}</span></span><button class="x" onclick="delItem('cards','${cd.id}')">✕</button></div>`).join("");
+  $("cardList").innerHTML=S.cards.map(cd=>{const t=statementCycle(todayISO(),cd.closingDay,c.s.payday,cd.dueDay);return `<div class="list-row"><span class="left">${esc(cd.name)}<span class="tag" style="background:var(--ambersoft);color:#7A5E1E;margin-left:6px">${cd.closingDay}號結${cd.dueDay?" · "+cd.dueDay+"號繳":""}</span><span class="tag" style="background:var(--greensoft);color:var(--green)">今天刷→${parseInt(t.split("-")[1])}月期</span></span><button class="x" onclick="delItem('cards','${cd.id}')">✕</button></div>`}).join("");
   $("fincList").innerHTML=S.fixedIncomes.map(i=>`<div class="list-row"><span class="left">${esc(i.name)}</span><span style="display:flex;gap:8px;align-items:center"><span class="num" style="color:var(--green)">+${nt(i.amount)}</span><button class="x" onclick="delItem('fixedIncomes','${i.id}')">✕</button></span></div>`).join("");
   $("instList").innerHTML=c.activeInst.map(i=>`<div class="list-row"><span class="left">${esc(i.name)}<span class="tag" style="background:var(--rosesoft);color:var(--rose);margin-left:6px">第${i.currentPeriod}/${i.periods}期</span></span><span style="display:flex;gap:8px;align-items:center"><span class="num" style="color:var(--rose)">−${nt(i.monthly)}/期</span><button class="x" onclick="delItem('installments','${i.id}')">✕</button></span></div>`).join("");
   $("fexpList").innerHTML=c.fixedExpanded.map(f=>`<div class="list-row" style="opacity:${f.active?1:.45}"><span class="left">${esc(f.name)}${f.periods?`<span class="tag" style="background:var(--rosesoft);color:var(--rose);margin-left:6px">${f.active?"剩 "+f.remain+" 期":"已繳完"}</span>`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num" style="color:var(--rose)">−${nt(f.amount)}</span><button class="x" onclick="delItem('fixedExpenses','${f.id}')">✕</button></span></div>`).join("");
@@ -319,9 +320,20 @@ function render(){
   }).join("");
   $("recordList").innerHTML=html;
   $("emptyMsg").style.display=html?"none":"block";
+  updatePreview();
 }
 
 // ── 動作 ──
+function updatePreview(){
+  const box=$("cycPreview");
+  if(expType!=="card"||!expCardId){box.style.display="none";return}
+  const cd=cardById(expCardId);
+  if(!cd){box.style.display="none";return}
+  const iso=$("expDate").value||todayISO();
+  const target=statementCycle(iso,cd.closingDay,S.settings.payday,cd.dueDay);
+  box.style.display="block";
+  box.innerHTML="📅 這筆會歸到 <b>"+monthLabel(target)+"</b>("+cycleRange(target,S.settings.payday)+" 的預算)"+(target!==month?" — 不是目前檢視的這期":"");
+}
 function nav(d){month=shiftMonth(month,d);render()}
 function toggleSettings(){$("settings").classList.toggle("hide")}
 function setTab(k){tab=k;render()}
@@ -385,6 +397,12 @@ function pushMsg(role,text){
   d.appendChild(b);box.appendChild(d);box.scrollTop=box.scrollHeight;
 }
 function parseCardFromText(t){return S.cards.find(c=>{const n=c.name;return t.includes(n)||(n.length>=2&&t.includes(n.slice(0,2)))||(n.length>2&&t.includes(n.slice(-2)))})}
+function lastClosingISO(cd){
+  const t=new Date();let y=t.getFullYear(),m=t.getMonth()+1;
+  if(t.getDate()<cd.closingDay){m--;if(m<1){m=12;y--}}
+  const last=new Date(y,m,0).getDate();
+  return y+"-"+pad(m)+"-"+pad(Math.min(cd.closingDay,last));
+}
 function chatSend(){
   const inp=$("chatInput");const msg=inp.value.trim();if(!msg)return;
   inp.value="";pushMsg("user",msg);
@@ -402,13 +420,14 @@ function chatSend(){
     const a=parseFloat(amt[1]);const note=msg.replace(/\d+(?:\.\d+)?/g,"").replace(/元|塊|錢|收入/g,"").trim().slice(0,20)||"臨時收入";
     setMonthData(month,{incomes:md().incomes.concat([{id:uid(),dateISO:todayISO(),name:note,amount:a}])});save();render();
     reply="💰 已記臨時收入 "+nt(a)+"!本期還可以花 "+remainText();
-  }else if(amt&&/花|買|付|消費|吃|喝|搭|看|玩|美甲|除毛|刷|元|塊|帳單/.test(msg)){
+  }else if(amt&&/花|買|付|消費|吃|喝|搭|看|玩|美甲|除毛|刷|元|塊|帳單|結帳/.test(msg)){
     const a=parseFloat(amt[1]);const cd=parseCardFromText(msg);
     const note=msg.replace(/\d+(?:\.\d+)?/g,"").replace(/元|塊|錢|用|刷|付/g,"").trim().slice(0,20)||"記帳";
-    const isBill=/帳單/.test(msg);
-    const r=recordExpense(isBill&&cd?cd.name+"帳單":note,a,cd?"card":"cash",cd?cd.id:"",todayISO());
+    const isBill=/帳單|結帳/.test(msg);
+    const dateISO=(isBill&&cd)?lastClosingISO(cd):todayISO();
+    const r=recordExpense(isBill&&cd?cd.name+"帳單":note,a,cd?"card":"cash",cd?cd.id:"",dateISO);
     render();
-    reply="✅ 已記 "+nt(a)+" ["+(cd?cd.name:"現金")+"]"+(r.target!==month?",依結帳/繳款日歸到 "+monthLabel(r.target)+"(下期預算)":"")+"。本期還可以花 "+remainText();
+    reply=(isBill&&cd?"🧾 已記 "+cd.name+"帳單("+shortDate(dateISO)+"結帳)"+nt(a):"✅ 已記 "+nt(a)+" ["+(cd?cd.name:"現金")+"]")+(r.target!==month?",歸到 "+monthLabel(r.target)+(isBill?"(那期薪水繳)":"(下期預算)"):",歸本期")+"。本期還可以花 "+remainText();
   }else if(/剩|還可以|還能|多少|分析|狀況/.test(msg)){
     const c=calc();
     reply="📊 本期("+cycleRange(month,s.payday)+")\n預算 "+nt(c.budget)+",已花 "+nt(c.totalSpent)+"\n(現金"+nt(c.cashSpent)+" / 刷卡"+nt(c.cardSpent)+" / 分期"+nt(c.instSpent)+")\n還可以花 "+remainText()+(c.nextPre>0?"\n已排到下期的刷卡 "+nt(c.nextPre):"");
